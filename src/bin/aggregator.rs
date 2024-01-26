@@ -1,4 +1,4 @@
-use oracle_takehome::{aggregator_process, client_process, Result};
+use crypto_price_aggregator::{aggregator_process, client_process, Result};
 
 #[tokio::main]
 async fn main() -> Result<()> {

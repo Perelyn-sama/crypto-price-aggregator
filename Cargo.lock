@@ -246,6 +246,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "crypto-price-aggregator"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "dotenv",
+ "eyre",
+ "hex",
+ "k256",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tungstenite",
+ "url",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -642,22 +658,6 @@ dependencies = [
  "libc",
  "pkg-config",
  "vcpkg",
-]
-
-[[package]]
-name = "oracle-takehome"
-version = "0.1.0"
-dependencies = [
- "clap",
- "dotenv",
- "eyre",
- "hex",
- "k256",
- "serde",
- "serde_json",
- "tokio",
- "tungstenite",
- "url",
 ]
 
 [[package]]

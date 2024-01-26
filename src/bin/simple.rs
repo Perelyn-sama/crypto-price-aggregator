@@ -1,4 +1,4 @@
-use oracle_takehome::{cache, read_from_json, store_as_json, Parser, Result};
+use crypto_price_aggregator::{cache, read_from_json, store_as_json, Parser, Result};
 
 /// A basic CLi for calculating the average price of BTCUSDT
 #[derive(Parser, Debug)]
