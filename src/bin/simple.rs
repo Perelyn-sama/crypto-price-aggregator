@@ -1,6 +1,4 @@
-use clap::Parser;
-use eyre::Result;
-use oracle_takehome::{cache, read_from_json, store_as_json};
+use oracle_takehome::{cache, read_from_json, store_as_json, Parser, Result};
 
 /// A basic CLi for calculating the average price of BTCUSDT
 #[derive(Parser, Debug)]
