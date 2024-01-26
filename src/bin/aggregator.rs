@@ -1,17 +1,16 @@
-use oracle_takehome::{aggregator_process, client_process, SIGNING_KEYS};
+use oracle_takehome::{aggregator_process, client_process, Result};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let mut handles = Vec::new();
 
-    // Create a simple streaming channel
     let (tx, rx) = ::std::sync::mpsc::channel();
 
     for i in 0..5 {
         let tx = tx.clone();
-        handles.push(tokio::spawn(async move {
-            tx.send(client_process(SIGNING_KEYS[i]).await)
-        }));
+        handles.push(tokio::spawn(
+            async move { tx.send(client_process(i + 1).await) },
+        ));
     }
 
     let aggregator_handle = tokio::spawn(async move {
@@ -19,8 +18,10 @@ async fn main() {
     });
 
     for handle in handles {
-        handle.await.unwrap().unwrap();
+        handle.await??;
     }
 
-    aggregator_handle.await.unwrap();
+    aggregator_handle.await?;
+
+    Ok(())
 }

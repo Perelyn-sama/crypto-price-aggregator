@@ -1,26 +1,32 @@
-use eyre::Result;
+pub use eyre::Result;
 use hex::decode;
 use k256::ecdsa::{signature::Signer, Signature, SigningKey};
 use k256::ecdsa::{signature::Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 use std::sync::mpsc::Receiver;
 use tungstenite::{connect, Message};
 use url::Url;
 
-const CLIENT_ONE_KEY: &str = "de05b8d4427ecb78b138586181323083fe434df53571bfcbde7a92ec8a96d31f";
-const CLIENT_TWO_KEY: &str = "1a8752024402e13781bbc9b5004709d2f673586d54db3a4e61b8c685a1ebe2fd";
-const CLIENT_THREE_KEY: &str = "b0c183f8e4ff2e9bd82725d75412aba8106bf45068cb67049b2f217c4806cf68";
-const CLIENT_FOUR_KEY: &str = "381a27a834e3342da70b23f72103bbe2bb01d097e1c788a9534ec083e2684e60";
-const CLIENT_FIVE_KEY: &str = "4b231ea64938e42acb4e431bca21a1b8125cfb1cfd05c95e0166dc20d7a99b3c";
+const CLIENT_ONE_PUBLICKEY: &str =
+    "02a442d13ba89bbaeb766b1e145e3ea07db831e1a4f418fad82d8323bf2ca8218e";
+const CLIENT_TWO_PUBLICKEY: &str =
+    "02ab02d2d0589dd072a5323f6bab8ff8690664b1f8a7f6e8a339b9902ad73cfe27";
+const CLIENT_THREE_PUBLICKEY: &str =
+    "02ad8b749821280e748a1de7114aad18bb4e10750815270c0d9d008af99238f47f";
+const CLIENT_FOUR_PUBLICKEY: &str =
+    "0355aeda8cfabf9abf206e6db057989534a28ba3338769d5473834844f147dc603";
+const CLIENT_FIVE_PUBLICKEY: &str =
+    "031cb5014532b69a8521c7642bde88b47bff0eada8b1324e49a8b8a65670e987ca";
 
-pub const SIGNING_KEYS: [&str; 5] = [
-    CLIENT_ONE_KEY,
-    CLIENT_TWO_KEY,
-    CLIENT_THREE_KEY,
-    CLIENT_FOUR_KEY,
-    CLIENT_FIVE_KEY,
+pub const VERIFYING_KEYS: [&str; 5] = [
+    CLIENT_ONE_PUBLICKEY,
+    CLIENT_TWO_PUBLICKEY,
+    CLIENT_THREE_PUBLICKEY,
+    CLIENT_FOUR_PUBLICKEY,
+    CLIENT_FIVE_PUBLICKEY,
 ];
 
 #[derive(Serialize)]
@@ -95,27 +101,33 @@ pub fn read_from_json() -> Option<Data> {
     }
 }
 
-pub async fn client_process(signing_key: &str) -> Result<(SigningKey, Signature, f32)> {
-    let signing_key_bytes = decode(signing_key).expect("Decoding failed");
+pub async fn client_process(client_id: u32) -> Result<(u32, Signature, f32)> {
+    // Load variables from .env file
+    dotenv::dotenv().ok();
+
+    let env_key = format!("CLIENTSIGNINGKEY{}", client_id);
+    let client_signing_key = env::var(env_key).expect("Key not found in environment");
+
+    let signing_key_bytes = decode(client_signing_key).expect("Decoding failed");
     let signing_key = SigningKey::from_slice(&signing_key_bytes).expect("Conversion failed");
 
     let data = cache(10).await?;
     let signature: Signature = signing_key.sign(&data.average.to_be_bytes());
 
-    Ok((signing_key, signature, data.average))
+    Ok((client_id, signature, data.average))
 }
 
 pub async fn aggregator_process(
-    rx: Receiver<Result<(SigningKey, Signature, f32), eyre::Report>>,
+    rx: Receiver<Result<(u32, Signature, f32), eyre::Report>>,
 ) -> Result<()> {
     let mut averages = Vec::new();
 
     for _ in 0..5 {
-        let (signing_key, sig, avg) = rx.recv()??;
+        let (client_id, sig, avg) = rx.recv()??;
 
-        let verifying_key = VerifyingKey::from(signing_key);
-        // dbg!(verifying_key.to_encoded_point(false));
-        dbg!(hex::encode(verifying_key.to_sec1_bytes()));
+        let verifying_key =
+            VerifyingKey::from_sec1_bytes(&decode(VERIFYING_KEYS[client_id as usize - 1])?)?;
+
         assert!(verifying_key.verify(&avg.to_be_bytes(), &sig).is_ok());
 
         averages.push(avg);
