@@ -1,3 +1,4 @@
+pub use clap::Parser;
 pub use eyre::Result;
 use hex::decode;
 use k256::ecdsa::{signature::Signer, Signature, SigningKey};
@@ -47,9 +48,19 @@ pub struct Data {
     pub average: f32,
 }
 
+#[derive(Deserialize, Debug)]
+struct WebSocketResponse {
+    result: WebSocketResult,
+}
+
+#[derive(Deserialize, Debug)]
+struct WebSocketResult {
+    price: String,
+}
+
 pub async fn cache(times: usize) -> Result<Data> {
-    let (mut socket, _) =
-        connect(Url::parse("wss://ws-api.binance.com:443/ws-api/v3")?).expect("can't connect");
+    let url = Url::parse("wss://ws-api.binance.com:443/ws-api/v3").map_err(|e| eyre::eyre!(e))?;
+    let (mut socket, _) = connect(url).map_err(|e| eyre::eyre!(e))?;
 
     let payload = WebSocketRequest {
         id: "043a7cf2-bde3-4888-9604-c8ac41fcba4d".to_string(),
@@ -64,13 +75,20 @@ pub async fn cache(times: usize) -> Result<Data> {
     for _i in 0..times {
         let serialized = serde_json::to_string(&payload)?;
         socket.send(Message::Text(serialized))?;
-        let msg = socket.read().expect("Error reading message");
 
-        data_points.push(
-            msg.into_text()?.to_owned()[96..110]
-                .parse()
-                .expect("should be a valid decimal"),
-        );
+        let msg = socket.read().map_err(|e| eyre::eyre!(e))?;
+
+        let msg_test = msg.into_text().map_err(|e| eyre::eyre!(e))?;
+        let ws_response: WebSocketResponse =
+            serde_json::from_str(&msg_test).map_err(|e| eyre::eyre!(e))?;
+
+        let price = ws_response
+            .result
+            .price
+            .parse::<f32>()
+            .map_err(|e| eyre::eyre!(e))?;
+
+        data_points.push(price);
     }
 
     let average: f32 = data_points.iter().sum::<f32>() / data_points.len() as f32;
@@ -82,23 +100,21 @@ pub async fn cache(times: usize) -> Result<Data> {
 }
 
 pub fn store_as_json(data: Data) -> Result<()> {
-    let json_string = serde_json::to_string(&data).expect("Failed to serialize to JSON");
+    let json_string = serde_json::to_string(&data).map_err(|e| eyre::eyre!(e))?;
 
-    let mut file = File::create("output.json").expect("Failed to create file");
+    let mut file = File::create("output.json").map_err(|e| eyre::eyre!(e))?;
 
     file.write_all(json_string.as_bytes())
-        .expect("Failed to write to file");
+        .map_err(|e| eyre::eyre!(e))?;
 
     Ok(())
 }
 
-pub fn read_from_json() -> Option<Data> {
-    match std::fs::read_to_string("output.json") {
-        Ok(p) => {
-            return Some(serde_json::from_str(&p).expect("Error parsing JSON"));
-        }
-        Err(_) => return None,
-    }
+pub fn read_from_json() -> Result<Data> {
+    let json_str = std::fs::read_to_string("output.json").map_err(|e| eyre::eyre!(e))?;
+    let data = serde_json::from_str(&json_str).map_err(|e| eyre::eyre!(e))?;
+
+    Ok(data)
 }
 
 pub async fn client_process(client_id: u32) -> Result<(u32, Signature, f32)> {
@@ -106,10 +122,10 @@ pub async fn client_process(client_id: u32) -> Result<(u32, Signature, f32)> {
     dotenv::dotenv().ok();
 
     let env_key = format!("CLIENTSIGNINGKEY{}", client_id);
-    let client_signing_key = env::var(env_key).expect("Key not found in environment");
+    let client_signing_key = env::var(env_key).map_err(|e| eyre::eyre!(e))?;
 
-    let signing_key_bytes = decode(client_signing_key).expect("Decoding failed");
-    let signing_key = SigningKey::from_slice(&signing_key_bytes).expect("Conversion failed");
+    let signing_key_bytes = decode(client_signing_key).map_err(|e| eyre::eyre!(e))?;
+    let signing_key = SigningKey::from_slice(&signing_key_bytes).map_err(|e| eyre::eyre!(e))?;
 
     let data = cache(10).await?;
     let signature: Signature = signing_key.sign(&data.average.to_be_bytes());
